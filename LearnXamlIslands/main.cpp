@@ -208,6 +208,23 @@ public:
         _top_window = std::make_unique<win32_window>(*_top_wnd_class, L"LearnXamlIslands", WS_OVERLAPPEDWINDOW, WS_EX_OVERLAPPEDWINDOW | WS_EX_NOREDIRECTIONBITMAP, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hinstance);
         _top_window->set_window_proc(std::bind(&xaml_island_window::_top_window_proc, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
+        if (!_top_border_wnd_class)
+        {
+            WNDCLASSEX wc = {};
+            wc.cbSize = sizeof(wc);
+            wc.hInstance = hinstance;
+            wc.lpfnWndProc = win32_window::global_window_proc;
+            wc.lpszClassName = L"xaml_island_top_border_window_class";
+            wc.hbrBackground = GetStockBrush(GRAY_BRUSH);
+
+            _top_border_wnd_class = std::make_unique<window_class>(&wc, hinstance);
+        }
+
+        const auto root_wnd_size = _top_window->get_size();
+        const auto top_border_height = _get_top_border_height();
+        _top_border_window = std::make_unique<win32_window>(*_top_border_wnd_class, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, WS_EX_LAYERED, 0, 0, root_wnd_size.cx, top_border_height, hinstance, _top_window->get_handle());
+        SetLayeredWindowAttributes(_top_border_window->get_handle(), 0xFFFFFFFF, 100, LWA_ALPHA);
+
         auto xaml_source_native = _xaml_source.as<IDesktopWindowXamlSourceNative>();
         xaml_source_native->AttachToWindow(_top_window->get_handle());
 
@@ -288,10 +305,12 @@ public:
     {
         auto drag_wnd_it = _drag_windows.cbegin();
 
+        const auto top_border_height = _get_top_border_height();
+
         for (const auto& rect : client_rects)
         {
             int x = rect.left;
-            int y = rect.top;
+            int y = rect.top + top_border_height;
             int width = rect.right - rect.left;
             int height = rect.bottom - rect.top;
 
@@ -531,13 +550,16 @@ private:
 
     void _reposition_island_window(bool show = false) const
     {
-        RECT client_rc;
-        winrt::check_bool(GetClientRect(_top_window->get_handle(), &client_rc));
+        RECT island_rc;
+        winrt::check_bool(GetClientRect(_top_window->get_handle(), &island_rc));
 
-        int x = client_rc.left;
-        int y = client_rc.top;
-        int width = client_rc.right - client_rc.left;
-        int height = client_rc.bottom - client_rc.top;
+        // shift it down for the top border
+        island_rc.top = _get_top_border_height();
+
+        int x = island_rc.left;
+        int y = island_rc.top;
+        int width = island_rc.right - island_rc.left;
+        int height = island_rc.bottom - island_rc.top;
 
         if (show)
         {
@@ -547,6 +569,11 @@ private:
         {
             winrt::check_bool(MoveWindow(_island_window_handle, x, y, width, height, FALSE));
         }
+    }
+
+    int _get_top_border_height() const
+    {
+        return 100 * get_dpi_scale();
     }
 
     static HCURSOR _load_cursor(WORD type)
@@ -561,6 +588,7 @@ private:
     }
 
     static std::unique_ptr<window_class> _top_wnd_class;
+    static std::unique_ptr<window_class> _top_border_wnd_class;
     static std::unique_ptr<window_class> _drag_wnd_class;
     static HCURSOR _normal_cursor;
     static HCURSOR _vertical_resize_cursor;
@@ -568,6 +596,7 @@ private:
     HINSTANCE _hinstance;
     bool _extend_title_bar_into_client_area;
     std::unique_ptr<win32_window> _top_window;
+    std::unique_ptr<win32_window> _top_border_window;
     std::vector<win32_window> _drag_windows;
     HWND _island_window_handle;
     DesktopWindowXamlSource _xaml_source;
@@ -576,6 +605,7 @@ private:
 };
 
 std::unique_ptr<window_class> xaml_island_window::_top_wnd_class;
+std::unique_ptr<window_class> xaml_island_window::_top_border_wnd_class;
 std::unique_ptr<window_class> xaml_island_window::_drag_wnd_class;
 HCURSOR xaml_island_window::_normal_cursor = xaml_island_window::_load_cursor(OCR_NORMAL);
 HCURSOR xaml_island_window::_vertical_resize_cursor = xaml_island_window::_load_cursor(OCR_SIZENS);
@@ -602,13 +632,13 @@ int WINAPI wWinMain(_In_ HINSTANCE hinstance, _In_opt_ HINSTANCE, _In_ LPWSTR, _
     wnd.set_extend_title_bar_into_client_area(true);
 
     const auto size = wnd.get_size();
-    const auto dpi = wnd.get_dpi_scale();
-    wnd.set_drag_area({ {0, 0, static_cast<LONG>(size.cx * dpi), static_cast<LONG>(50 * dpi)} });
+    const auto scale = wnd.get_dpi_scale();
+    wnd.set_drag_area({ {0, 0, static_cast<LONG>(size.cx * scale), static_cast<LONG>(50 * scale)} });
 
     wnd.set_resize_cb([&](auto new_width, auto /* new_height */)
         {
-            const auto dpi = wnd.get_dpi_scale();
-            wnd.set_drag_area({ {0, 0, static_cast<LONG>(new_width * dpi), static_cast<LONG>(50 * dpi)} });
+            const auto scale = wnd.get_dpi_scale();
+            wnd.set_drag_area({ {0, 0, static_cast<LONG>(new_width * scale), static_cast<LONG>(50 * scale)} });
         });
 
     wnd.show(cmd_show);

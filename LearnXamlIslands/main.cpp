@@ -227,12 +227,21 @@ public:
         brush.FallbackColor({ 0xFF, 0x00, 0x80, 0x00 });
         title_bar_grid.Background(brush);
 
-        TextBlock body_block;
-        body_block.Text(L"Acrylic title bar!");
+        TextBlock text_block;
+        text_block.Text(L"Acrylic title bar!");
 
-        Grid body_grid;
-        body_grid.Children().Append(body_block);
-        body_grid.Padding({ 10.0, 10.0, 10.0, 10.0 });
+        Button close_btn;
+        close_btn.Content(winrt::box_value(std::wstring_view(L"Close")));
+        close_btn.Margin({ 0, 10.0, 0.0, 0.0 });
+        _close_btn_click_revoker = close_btn.Click(winrt::auto_revoke, [this](auto /* sender */, auto /* args */)
+            {
+                PostMessage(_top_window->get_handle(), WM_CLOSE, 0, 0);
+            });
+
+        StackPanel body_stack;
+        body_stack.Children().Append(text_block);
+        body_stack.Children().Append(close_btn);
+        body_stack.Padding({ 10.0, 10.0, 10.0, 10.0 });
 
         Grid grid;
 
@@ -247,8 +256,8 @@ public:
         RowDefinition body_row;
         body_row.Height({ 1.0, GridUnitType::Star });
         grid.RowDefinitions().Append(body_row);
-        grid.Children().Append(body_grid);
-        Grid::SetRow(body_grid, 1);
+        grid.Children().Append(body_stack);
+        Grid::SetRow(body_stack, 1);
 
         _xaml_source.Content(grid);
 
@@ -310,7 +319,6 @@ public:
                 //   could also set its opacity to 0 because it's a layered
                 //   window but this is simpler).
                 auto& wnd = _drag_windows.emplace_back(*_drag_wnd_class, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP, x, y, width, height, _hinstance, _top_window->get_handle());
-                wnd.set_window_proc(std::bind(&xaml_island_window::_drag_window_proc, this, std::ref(wnd), std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
                 wnd.bring_on_top();
 
                 // it will become invalid after the `emplace_back` so we reset it
@@ -357,22 +365,22 @@ private:
                 POINT screen_pt = client_pt;
                 if (ClientToScreen(_top_window->get_handle(), &screen_pt))
                 {
-                    WPARAM cmd = -1;
+                    std::optional<WPARAM> cmd;
 
                     LRESULT hit_test = SendMessage(_top_window->get_handle(), WM_NCHITTEST, 0, MAKELPARAM(screen_pt.x, screen_pt.y));
                     switch (hit_test)
                     {
                     case HTCAPTION:
-                        cmd = SC_MOVE + hit_test;
+                        cmd = { SC_MOVE + hit_test };
                         break;
                     case HTTOP:
-                        cmd = SC_SIZE + WMSZ_TOP;
+                        cmd = { SC_SIZE + WMSZ_TOP };
                         break;
                     }
 
-                    if (cmd != -1)
+                    if (cmd.has_value())
                     {
-                        PostMessage(_top_window->get_handle(), WM_SYSCOMMAND, cmd, MAKELPARAM(client_pt.x, client_pt.y));
+                        PostMessage(_top_window->get_handle(), WM_SYSCOMMAND, cmd.value(), MAKELPARAM(client_pt.x, client_pt.y));
                     }
                 }
             }
@@ -521,15 +529,6 @@ private:
         return DefWindowProc(_top_window->get_handle(), msg, w, l);
     }
 
-    LRESULT _drag_window_proc(win32_window& wnd, _In_ UINT msg, _In_ WPARAM w, _In_ LPARAM l) noexcept
-    {
-        switch (msg)
-        {
-        }
-
-        return DefWindowProc(wnd.get_handle(), msg, w, l);
-    }
-
     void _reposition_island_window(bool show = false) const
     {
         RECT client_rc;
@@ -572,6 +571,7 @@ private:
     std::vector<win32_window> _drag_windows;
     HWND _island_window_handle;
     DesktopWindowXamlSource _xaml_source;
+    Button::Click_revoker _close_btn_click_revoker;
     std::function<void(int new_width, int new_height)> _resize_cb;
 };
 
@@ -605,7 +605,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hinstance, _In_opt_ HINSTANCE, _In_ LPWSTR, _
     const auto dpi = wnd.get_dpi_scale();
     wnd.set_drag_area({ {0, 0, static_cast<LONG>(size.cx * dpi), static_cast<LONG>(50 * dpi)} });
 
-    wnd.set_resize_cb([&](int new_width, int new_height)
+    wnd.set_resize_cb([&](auto new_width, auto /* new_height */)
         {
             const auto dpi = wnd.get_dpi_scale();
             wnd.set_drag_area({ {0, 0, static_cast<LONG>(new_width * dpi), static_cast<LONG>(50 * dpi)} });

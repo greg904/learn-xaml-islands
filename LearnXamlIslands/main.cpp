@@ -140,6 +140,22 @@ public:
         };
     }
 
+    UINT get_dpi() const
+    {
+        const auto ret = GetDpiForWindow(_handle);
+        if (ret == 0)
+        {
+            winrt::throw_last_error();
+        }
+
+        return ret;
+    }
+
+    float get_dpi_scale() const
+    {
+        return static_cast<float>(get_dpi()) / static_cast<float>(USER_DEFAULT_SCREEN_DPI);
+    }
+
     void set_window_proc(std::function<LRESULT(_In_ UINT msg, _In_ WPARAM w, _In_ LPARAM l)> window_proc)
     {
         _window_proc = window_proc;
@@ -323,6 +339,11 @@ public:
         return _top_window->get_size();
     }
 
+    float get_dpi_scale() const
+    {
+        return _top_window->get_dpi_scale();
+    }
+
 private:
     LRESULT _top_window_proc(_In_ UINT msg, _In_ WPARAM w, _In_ LPARAM l) noexcept
     {
@@ -403,6 +424,16 @@ private:
             }
 
             break;
+        case WM_DPICHANGED:
+        {
+            RECT *suggested_rect = reinterpret_cast<RECT*>(l);
+            int x = suggested_rect->left;
+            int y = suggested_rect->top;
+            int width = suggested_rect->right - suggested_rect->left;
+            int height = suggested_rect->bottom - suggested_rect->top;
+            _top_window->resize(x, y, width, height);
+            return 0;
+        }
         case WM_NCHITTEST:
         {
             POINT pt = { GET_X_LPARAM(l), GET_Y_LPARAM(l) };
@@ -421,9 +452,10 @@ private:
                 return originalRet;
             }
 
+            const auto dpi = _top_window->get_dpi();
             const auto top_resize_handle_height =
-                GetSystemMetrics(SM_CXPADDEDBORDER) + // there isn't a SM_CYPADDEDBORDER for the Y axis
-                GetSystemMetrics(SM_CYSIZEFRAME); 
+                GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi) + // there isn't a SM_CYPADDEDBORDER for the Y axis
+                GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi);
             if (pt.y < window_rect.top + top_resize_handle_height)
             {
                 return HTTOP;
@@ -570,10 +602,13 @@ int WINAPI wWinMain(_In_ HINSTANCE hinstance, _In_opt_ HINSTANCE, _In_ LPWSTR, _
     wnd.set_extend_title_bar_into_client_area(true);
 
     const auto size = wnd.get_size();
-    wnd.set_drag_area({ {0, 0, size.cx, 50} });
+    const auto dpi = wnd.get_dpi_scale();
+    wnd.set_drag_area({ {0, 0, static_cast<LONG>(size.cx * dpi), static_cast<LONG>(50 * dpi)} });
+
     wnd.set_resize_cb([&](int new_width, int new_height)
         {
-            wnd.set_drag_area({ {0, 0, new_width, 50} });
+            const auto dpi = wnd.get_dpi_scale();
+            wnd.set_drag_area({ {0, 0, static_cast<LONG>(new_width * dpi), static_cast<LONG>(50 * dpi)} });
         });
 
     wnd.show(cmd_show);

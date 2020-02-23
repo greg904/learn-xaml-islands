@@ -35,6 +35,6 @@
     <Text Include="readme.txt" />
   </ItemGroup>
   <ItemGroup>
-    <Manifest Include="app.manifest" />
+    <Manifest Include="LearnXamlIslands.exe.manifest" />
   </ItemGroup>
 </Project>

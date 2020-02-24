@@ -297,6 +297,7 @@ public:
         if (_extend_title_bar_into_client_area != value)
         {
             _extend_title_bar_into_client_area = value;
+            _update_dwm_frame();
             _top_window->update_frame();
         }
     }
@@ -546,6 +547,35 @@ private:
         }
 
         return DefWindowProc(_top_window->get_handle(), msg, w, l);
+    }
+
+    void _update_dwm_frame()
+    {
+        MARGINS margins = { 0, 0, 32, 0 };
+
+        if (_extend_title_bar_into_client_area)
+        {
+            const auto wnd_style = GetWindowLong(_top_window->get_handle(), GWL_STYLE);
+            const auto wnd_style_ex = GetWindowLong(_top_window->get_handle(), GWL_EXSTYLE);
+            if (wnd_style != 0 && wnd_style_ex != 0)
+            {
+                RECT frame_rect = { 0, 0, 0, 0 };
+                if (AdjustWindowRectExForDpi(&frame_rect, wnd_style, FALSE, wnd_style_ex, _top_window->get_dpi()))
+                {
+                    // Extend the whole top part of the non-client frame to get
+                    // it back but also be able to draw on top of it now.
+                    margins.cyTopHeight = -frame_rect.top;
+
+                    // For some reason, this gets 33 pixels but the real value
+                    // that is used by UWP apps is 32 pixels.
+                    // TODO: figure out why that is
+                    margins.cyTopHeight = 32;
+                }
+            }
+        }
+
+        // TODO: log errors
+        DwmExtendFrameIntoClientArea(_top_window->get_handle(), &margins);
     }
 
     void _reposition_island_window(bool show = false) const

@@ -74,7 +74,7 @@ public:
     {
     }
 
-    win32_window(const window_class& wnd_class, LPCTSTR name, DWORD style, DWORD style_ex, int x, int y, int width, int height, HINSTANCE hinstance, HWND parent_handle = NULL)
+    win32_window(const window_class& wnd_class, LPCTSTR name, DWORD style, DWORD style_ex, int x, int y, int width, int height, HINSTANCE hinstance, HWND parent_handle = HWND_DESKTOP)
     {
         const auto ret = CreateWindowEx(style_ex, wnd_class.to_param(), name, style, x, y, width, height, parent_handle, NULL, hinstance, this);
         if (ret == NULL)
@@ -121,12 +121,12 @@ public:
 
     void bring_on_top() const
     {
-        winrt::check_bool(SetWindowPos(_handle, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOOWNERZORDER));
+        winrt::check_bool(SetWindowPos(_handle, HWND_TOP, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOREDRAW));
     }
 
     void update_frame() const
     {
-        winrt::check_bool(SetWindowPos(_handle, 0, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER));
+        winrt::check_bool(SetWindowPos(_handle, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_NOREDRAW));
     }
 
     SIZE get_size() const
@@ -444,7 +444,10 @@ private:
             break;
         }
         case WM_SIZE:
-            _reposition_island_window();
+            if (_island_window_handle != NULL)
+            {
+                _reposition_island_window();
+            }
             
             if (_resize_cb)
             {
@@ -593,7 +596,7 @@ private:
 
         if (show)
         {
-            winrt::check_bool(SetWindowPos(_island_window_handle, HWND_BOTTOM, x, y, width, height, SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_NOOWNERZORDER));
+            winrt::check_bool(SetWindowPos(_island_window_handle, HWND_BOTTOM, x, y, width, height, SWP_SHOWWINDOW | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOREDRAW));
         }
         else
         {
@@ -628,7 +631,7 @@ private:
     std::unique_ptr<win32_window> _top_window;
     std::unique_ptr<win32_window> _top_border_window;
     std::vector<win32_window> _drag_windows;
-    HWND _island_window_handle;
+    HWND _island_window_handle = NULL;
     DesktopWindowXamlSource _xaml_source;
     Button::Click_revoker _close_btn_click_revoker;
     std::function<void(int new_width, int new_height)> _resize_cb;

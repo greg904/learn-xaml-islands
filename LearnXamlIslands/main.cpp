@@ -426,11 +426,7 @@ private:
                 return originalRet;
             }
 
-            const auto dpi = _top_window->get_dpi();
-            const auto top_resize_handle_height =
-                GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi) + // there isn't a SM_CYPADDEDBORDER for the Y axis
-                GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi);
-            if (pt.y < window_rect.top + top_resize_handle_height)
+            if (pt.y < window_rect.top + _get_top_resize_handle_height())
             {
                 return HTTOP;
             }
@@ -470,7 +466,7 @@ private:
                     // TODO: We should probably set the 2 other RECTS in
                     //  `params->rgrc` (see the doc for `WM_NCCALCSIZE`).
 
-                    return ret;
+                    return 0;
                 }
                 else if (w == FALSE)
                 {
@@ -576,8 +572,22 @@ private:
         RECT island_rc;
         winrt::check_bool(GetClientRect(_top_window->get_handle(), &island_rc));
 
-        // shift it down for the top border
-        island_rc.top = _get_top_border_height();
+        WINDOWPLACEMENT placement;
+        if (GetWindowPlacement(_top_window->get_handle(), &placement) && placement.showCmd == SW_SHOWMAXIMIZED)
+        {
+            // When a window is maximized, its size is actually a little bit more
+            // than the monitor's work area. The window is positioned and sized in
+            // such a way that the resize handles are outside of the monitor and
+            // then the window is clipped to the monitor so that the resize handle
+            // do not appear because you don't need them (because you can't resize
+            // a window when it's maximized unless you restore it).
+            island_rc.top += _get_top_resize_handle_height();
+        }
+        else
+        {
+            // we keep a border at the top which imitates the system top border
+            island_rc.top = _get_top_border_height();
+        }
 
         int x = island_rc.left;
         int y = island_rc.top;
@@ -597,6 +607,13 @@ private:
     int _get_top_border_height() const
     {
         return static_cast<int>(1 * get_dpi_scale());
+    }
+
+    int _get_top_resize_handle_height() const
+    {
+        const auto dpi = _top_window->get_dpi();
+        return GetSystemMetricsForDpi(SM_CXPADDEDBORDER, dpi) + // there isn't a SM_CYPADDEDBORDER for the Y axis
+            GetSystemMetricsForDpi(SM_CYSIZEFRAME, dpi);
     }
 
     static HCURSOR _load_cursor(WORD type)

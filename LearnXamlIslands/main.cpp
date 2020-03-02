@@ -287,7 +287,10 @@ public:
 
     void set_drag_area(const std::vector<RECT>& client_rects)
     {
-        auto drag_wnd_it = _drag_windows.cbegin();
+        // For some reason, resizing windows doesn't work: the window doesn't
+        // receive messages in the new resized area. However, re-creating a
+        // window fixes it.
+        _drag_windows.clear();
 
         const auto top_border_height = _get_top_border_height();
 
@@ -298,46 +301,31 @@ public:
             int width = rect.right - rect.left;
             int height = rect.bottom - rect.top;
 
-            if (drag_wnd_it == _drag_windows.cend())
+            if (!_drag_wnd_class)
             {
-                if (!_drag_wnd_class)
-                {
-                    WNDCLASSEX wc = {};
-                    wc.cbSize = sizeof(wc);
-                    wc.hInstance = _hinstance;
-                    wc.lpfnWndProc = win32_window::global_window_proc;
-                    wc.lpszClassName = L"xaml_island_drag_window_class";
+                WNDCLASSEX wc = {};
+                wc.cbSize = sizeof(wc);
+                wc.hInstance = _hinstance;
+                wc.lpfnWndProc = win32_window::global_window_proc;
+                wc.style = CS_DBLCLKS;
+                wc.lpszClassName = L"xaml_island_drag_window_class";
 
-                    _drag_wnd_class = std::make_unique<window_class>(&wc, _hinstance);
-                }
-
-                // Add a new window if we don't have windows to reuse anymore.
-                // Description of window styles:
-                // - Use WS_CLIPSIBLING to clip the XAML Island window to make
-                //   sure that our window is on top of it and receives all mouse
-                //   input.
-                // - WS_EX_LAYERED is required. If it is not present, then for
-                //   some reason, the window will not receive any mouse input.
-                // - WS_EX_NOREDIRECTIONBITMAP makes the window invisible (we
-                //   could also set its opacity to 0 because it's a layered
-                //   window but this is simpler).
-                auto& wnd = _drag_windows.emplace_back(*_drag_wnd_class, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP, x, y, width, height, _hinstance, _top_window->get_handle());
-                wnd.bring_on_top();
-
-                // it will become invalid after the `emplace_back` so we reset it
-                drag_wnd_it = _drag_windows.cend();
+                _drag_wnd_class = std::make_unique<window_class>(&wc, _hinstance);
             }
-            else
-            {
-                // recycle old window
-                drag_wnd_it->resize(x, y, width, height);
 
-                drag_wnd_it++;
-            }
+            // Description of window styles:
+            // - Use WS_CLIPSIBLING to clip the XAML Island window to make
+            //   sure that our window is on top of it and receives all mouse
+            //   input.
+            // - WS_EX_LAYERED is required. If it is not present, then for
+            //   some reason, the window will not receive any mouse input.
+            // - WS_EX_NOREDIRECTIONBITMAP makes the window invisible (we
+            //   could also set its opacity to 0 because it's a layered
+            //   window but this is simpler).
+            auto& wnd = _drag_windows.emplace_back(*_drag_wnd_class, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, WS_EX_LAYERED | WS_EX_NOREDIRECTIONBITMAP, x, y, width, height, _hinstance, _top_window->get_handle());
+            wnd.set_window_proc(std::bind(&xaml_island_window::_drag_window_proc, this, _drag_windows.size() - 1, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+            wnd.bring_on_top();
         }
-
-        // remove now ununused windows
-        _drag_windows.erase(drag_wnd_it, _drag_windows.cend());
     }
 
     void set_resize_cb(std::function<void(int new_width, int new_height)> cb)
@@ -360,34 +348,6 @@ private:
     {
         switch (msg)
         {
-        case WM_PARENTNOTIFY:
-            if (w == WM_LBUTTONDOWN)
-            {
-                POINT client_pt = { GET_X_LPARAM(l), GET_Y_LPARAM(l) };
-
-                POINT screen_pt = client_pt;
-                if (ClientToScreen(_top_window->get_handle(), &screen_pt))
-                {
-                    std::optional<WPARAM> cmd;
-
-                    LRESULT hit_test = SendMessage(_top_window->get_handle(), WM_NCHITTEST, 0, MAKELPARAM(screen_pt.x, screen_pt.y));
-                    switch (hit_test)
-                    {
-                    case HTCAPTION:
-                        cmd = { SC_MOVE + hit_test };
-                        break;
-                    case HTTOP:
-                        cmd = { SC_SIZE + WMSZ_TOP };
-                        break;
-                    }
-
-                    if (cmd.has_value())
-                    {
-                        PostMessage(_top_window->get_handle(), WM_SYSCOMMAND, cmd.value(), MAKELPARAM(client_pt.x, client_pt.y));
-                    }
-                }
-            }
-            break;
         case WM_SETCURSOR:
         {
             if (LOWORD(l) == HTCLIENT)
@@ -533,6 +493,53 @@ private:
         }
 
         return DefWindowProc(_top_window->get_handle(), msg, w, l);
+    }
+
+    LRESULT _drag_window_proc(int index, _In_ UINT msg, _In_ WPARAM w, _In_ LPARAM l) noexcept
+    {
+        if (msg == WM_LBUTTONDOWN)
+        {
+            POINT client_pt = { GET_X_LPARAM(l), GET_Y_LPARAM(l) };
+
+            POINT screen_pt = client_pt;
+            if (ClientToScreen(_top_window->get_handle(), &screen_pt))
+            {
+                std::optional<WPARAM> cmd;
+
+                LRESULT hit_test = SendMessage(_top_window->get_handle(), WM_NCHITTEST, 0, MAKELPARAM(screen_pt.x, screen_pt.y));
+                switch (hit_test)
+                {
+                case HTCAPTION:
+                    cmd = { SC_MOVE + hit_test };
+                    break;
+                case HTTOP:
+                    cmd = { SC_SIZE + WMSZ_TOP };
+                    break;
+                }
+
+                if (cmd.has_value())
+                {
+                    PostMessage(_top_window->get_handle(), WM_SYSCOMMAND, cmd.value(), MAKELPARAM(client_pt.x, client_pt.y));
+                }
+            }
+        }
+        else if (msg == WM_LBUTTONDBLCLK)
+        {
+            WINDOWPLACEMENT placement;
+            if (GetWindowPlacement(_top_window->get_handle(), &placement))
+            {
+                if (placement.showCmd == SW_SHOWMAXIMIZED)
+                {
+                    PostMessage(_top_window->get_handle(), WM_SYSCOMMAND, SC_RESTORE, 0);
+                }
+                else
+                {
+                    PostMessage(_top_window->get_handle(), WM_SYSCOMMAND, SC_MAXIMIZE, 0);
+                }
+            }
+        }
+
+        return DefWindowProc(_drag_windows[index].get_handle(), msg, w, l);
     }
 
     void _update_dwm_frame()

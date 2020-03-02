@@ -502,7 +502,7 @@ private:
             POINT client_pt = { GET_X_LPARAM(l), GET_Y_LPARAM(l) };
 
             POINT screen_pt = client_pt;
-            if (ClientToScreen(_top_window->get_handle(), &screen_pt))
+            if (ClientToScreen(_drag_windows[index].get_handle(), &screen_pt))
             {
                 std::optional<WPARAM> cmd;
 

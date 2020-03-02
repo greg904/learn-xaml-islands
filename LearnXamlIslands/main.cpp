@@ -208,23 +208,6 @@ public:
         _top_window = std::make_unique<win32_window>(*_top_wnd_class, L"LearnXamlIslands", WS_OVERLAPPEDWINDOW, WS_EX_OVERLAPPEDWINDOW | WS_EX_NOREDIRECTIONBITMAP, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hinstance);
         _top_window->set_window_proc(std::bind(&xaml_island_window::_top_window_proc, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
-        if (!_top_border_wnd_class)
-        {
-            WNDCLASSEX wc = {};
-            wc.cbSize = sizeof(wc);
-            wc.hInstance = hinstance;
-            wc.lpfnWndProc = win32_window::global_window_proc;
-            wc.lpszClassName = L"xaml_island_top_border_window_class";
-            wc.hbrBackground = GetStockBrush(GRAY_BRUSH);
-
-            _top_border_wnd_class = std::make_unique<window_class>(&wc, hinstance);
-        }
-
-        const auto root_wnd_size = _top_window->get_size();
-        const auto top_border_height = _get_top_border_height();
-        _top_border_window = std::make_unique<win32_window>(*_top_border_wnd_class, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, WS_EX_LAYERED, 0, 0, root_wnd_size.cx, top_border_height, hinstance, _top_window->get_handle());
-        SetLayeredWindowAttributes(_top_border_window->get_handle(), 0xFFFFFFFF, 100, LWA_ALPHA);
-
         auto xaml_source_native = _xaml_source.as<IDesktopWindowXamlSourceNative>();
         xaml_source_native->AttachToWindow(_top_window->get_handle());
 
@@ -606,7 +589,7 @@ private:
 
     int _get_top_border_height() const
     {
-        return 100 * get_dpi_scale();
+        return static_cast<int>(1 * get_dpi_scale());
     }
 
     static HCURSOR _load_cursor(WORD type)
@@ -629,7 +612,6 @@ private:
     HINSTANCE _hinstance;
     bool _extend_title_bar_into_client_area;
     std::unique_ptr<win32_window> _top_window;
-    std::unique_ptr<win32_window> _top_border_window;
     std::vector<win32_window> _drag_windows;
     HWND _island_window_handle = NULL;
     DesktopWindowXamlSource _xaml_source;
@@ -638,7 +620,6 @@ private:
 };
 
 std::unique_ptr<window_class> xaml_island_window::_top_wnd_class;
-std::unique_ptr<window_class> xaml_island_window::_top_border_wnd_class;
 std::unique_ptr<window_class> xaml_island_window::_drag_wnd_class;
 HCURSOR xaml_island_window::_normal_cursor = xaml_island_window::_load_cursor(OCR_NORMAL);
 HCURSOR xaml_island_window::_vertical_resize_cursor = xaml_island_window::_load_cursor(OCR_SIZENS);

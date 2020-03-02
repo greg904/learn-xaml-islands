@@ -205,7 +205,7 @@ public:
             _top_wnd_class = std::make_unique<window_class>(&wc, hinstance);
         }
 
-        _top_window = std::make_unique<win32_window>(*_top_wnd_class, L"LearnXamlIslands", WS_OVERLAPPEDWINDOW, WS_EX_OVERLAPPEDWINDOW | WS_EX_NOREDIRECTIONBITMAP, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hinstance);
+        _top_window = std::make_unique<win32_window>(*_top_wnd_class, L"LearnXamlIslands", WS_OVERLAPPEDWINDOW, WS_EX_NOREDIRECTIONBITMAP, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, hinstance);
         _top_window->set_window_proc(std::bind(&xaml_island_window::_top_window_proc, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
         auto xaml_source_native = _xaml_source.as<IDesktopWindowXamlSourceNative>();
